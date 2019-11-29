@@ -6,9 +6,9 @@
 #include "loader.h"
 
 /* static function prototypes */
-static void dtor_Symbol(Symbol * symbol);
-static void dtor_Section(Section * section);
-static void dtor_Binary(Binary * binary);
+static void dtor_Symbol(Symbol ** symbol);
+static void dtor_Section(Section  ** section);
+static void dtor_Binary(Binary ** binary);
 static bfd * open_bfd(char * filename);
 static void load_symbols_bfd(bfd * bfd_handle, Binary * bin);
 static void load_dynsym_bfd(bfd * bfd_handle, Binary * bin);
@@ -28,9 +28,7 @@ int load_binary(char * fname, Binary ** bin)
 	}
 
 	/* let's create our Binary struct and start filling it up */
-	printf("binary pointer before allocation: %p", (*bin));
 	(*bin) = (Binary*)calloc(1, sizeof(Binary));
-	printf("binary pointer after allocation: %p", (*bin));
 
 	/* allocate the filename memory to a char array of the right length, then copy the string in */
 	(*bin)->filename = (char*)malloc(strlen(fname)+1);
@@ -92,20 +90,26 @@ int load_binary(char * fname, Binary ** bin)
 	return 0;
 }
 
-void unload_binary(Binary *bin)
+void unload_binary(Binary ** bin)
 {
 	/* calling dtor_Binary should be sufficient because it recursively frees all levels with valid pointers */
 	dtor_Binary(bin);
 }
 
 /* static function definitions */
-static void dtor_Symbol(Symbol * symbol)
+static void dtor_Symbol(Symbol ** symbol)
 {
-	if(symbol)
+	Symbol * sym = *symbol;
+
+	if(sym)
 	{
-		if(symbol->name)
-			free(symbol->name);
-		free(symbol);
+		if(sym->name)
+		{
+			free(sym->name);
+			sym->name = NULL;
+		}
+		free(sym);
+		*symbol = NULL;
 	}
 	else
 	{
@@ -116,15 +120,24 @@ static void dtor_Symbol(Symbol * symbol)
 	return;
 }
 
-static void dtor_Section(Section * section)
+static void dtor_Section(Section ** section)
 {
-	if(section)
+	Section * sec = *section;
+
+	if(sec)
 	{
-		if(section->name)
-			free(section->name);
-		if(section->bytes)
-			free(section->bytes);
-		free(section);
+		if(sec->name)
+		{
+			free(sec->name);
+			sec->name = NULL;
+		}
+		if(sec->bytes)
+		{
+			free(sec->bytes);
+			sec->bytes = NULL;
+		}
+		free(sec);
+		*section = NULL;
 	}
 	else
 	{
@@ -135,35 +148,48 @@ static void dtor_Section(Section * section)
 	return;
 }
 
-static void dtor_Binary(Binary * binary)
+static void dtor_Binary(Binary ** binary)
 {
+	Binary * bin = *binary;
 	unsigned int i;
-	if(binary)
+
+	if(bin)
 	{
-		if(binary->filename)
-			free(binary->filename);
-		if(binary->type_str)
-			free(binary->type_str);
-		if(binary->arch_str)
-			free(binary->arch_str);
-		if(binary->sections)
+		if(bin->filename)
 		{
-			for(i = 0U; i < binary->num_sections; i++)
-			{
-				dtor_Section(binary->sections[i]);		
-			}
-			free(binary->sections);
+			free(bin->filename);
+			bin->filename = NULL;
 		}
-		if(binary->symbols)
+		if(bin->type_str)
 		{
-			for(i = 0U; i < binary->num_symbols; i++)
-			{
-				dtor_Symbol(binary->symbols[i]);
-			}
-			free(binary->symbols);
+			free(bin->type_str);
+			bin->type_str = NULL;
 		}
-		
-		free(binary);
+		if(bin->arch_str)
+		{
+			free(bin->arch_str);
+			bin->arch_str = NULL;
+		}
+		if(bin->sections)
+		{
+			for(i = 0U; i < bin->num_sections; i++)
+			{
+				dtor_Section(&(bin->sections[i]));		
+			}
+			free(bin->sections);
+			bin->sections = NULL;
+		}
+		if(bin->symbols)
+		{
+			for(i = 0U; i < bin->num_symbols; i++)
+			{
+				dtor_Symbol(&(bin->symbols[i]));
+			}
+			free(bin->symbols);
+			bin->symbols = NULL;
+		}	
+		free(bin);
+		*binary = NULL;
 	}
 	else
 	{

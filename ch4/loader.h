@@ -100,6 +100,6 @@ struct _Symbol {
 
 /* global function prototypes */
 int load_binary(char * fname, Binary ** bin);
-void unload_binary(Binary * bin);
+void unload_binary(Binary ** bin);
 
 #endif /* LOADER_H */
