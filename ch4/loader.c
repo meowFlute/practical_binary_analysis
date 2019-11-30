@@ -288,7 +288,7 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 			fprintf(stderr, "failed to read symbol table\n\tERROR MESSAGE: (%s)\n", bfd_errmsg(bfd_get_error()));
 			free(bfd_symtab);
 			bfd_symtab = NULL;
-			err = 1;
+			err += 1;
 		}
 		/* on the first pass, we'll figure out how many function symbols we have */	
 		for(i = 0; i < nsyms; i++)
@@ -323,7 +323,7 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 			fprintf(stderr, "failed to read symbol table\n\tERROR MESSAGE: (%s)\n", bfd_errmsg(bfd_get_error()));
 			free(bfd_dynsym);
 			bfd_dynsym = NULL;
-			err = 2;
+			err += 2;
 		}
 		/* on the first pass, we'll figure out how many function symbols we have */	
 		for(i = 0; i < nsyms_dyn; i++)
