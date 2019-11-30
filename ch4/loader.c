@@ -10,8 +10,7 @@ static void dtor_Symbol(Symbol ** symbol);
 static void dtor_Section(Section  ** section);
 static void dtor_Binary(Binary ** binary);
 static bfd * open_bfd(char * filename);
-static void load_symbols_bfd(bfd * bfd_handle, Binary * bin);
-static void load_dynsym_bfd(bfd * bfd_handle, Binary * bin);
+static int load_symbols_bfd(bfd * bfd_handle, Binary * bin);
 static int load_sections_bfd(bfd * bfd_handle, Binary * bin);
 
 /* global function definitions */
@@ -28,17 +27,34 @@ int load_binary(char * fname, Binary ** bin)
 	}
 
 	/* let's create our Binary struct and start filling it up */
-	(*bin) = (Binary*)calloc(1, sizeof(Binary));
+	(*bin) = calloc(1, sizeof(Binary));
+	if(!bin && sizeof(Binary))
+	{
+		fprintf(stderr, "out of memory, calloc of (*bin) failed\n");
+		return -1;
+	}
 
 	/* allocate the filename memory to a char array of the right length, then copy the string in */
-	(*bin)->filename = (char*)malloc(strlen(fname)+1);
+	(*bin)->filename = malloc(strlen(fname)+1);
+	if(!((*bin)->filename) && (strlen(fname)+1))
+	{
+		dtor_Binary(bin);
+		fprintf(stderr, "out of memory, malloc of (*bin)->filename failed\n");
+		return -1;
+	}
 	strcpy((*bin)->filename, fname);
 
 	/* log the entry point */
 	(*bin)->entry = bfd_get_start_address(bfd_handle);
 
 	/* log the type string */
-	(*bin)->type_str = (char *)malloc(strlen(bfd_handle->xvec->name) + 1);
+	(*bin)->type_str = malloc(strlen(bfd_handle->xvec->name) + 1);
+	if(!((*bin)->type_str) && (strlen(bfd_handle->xvec->name) + 1))
+	{
+		dtor_Binary(bin);
+		fprintf(stderr, "out of memory, malloc of (*bin)->type_str failed\n");
+		return -1;
+	}
 	strcpy((*bin)->type_str, bfd_handle->xvec->name);
 
 	switch(bfd_handle->xvec->flavour)
@@ -59,7 +75,13 @@ int load_binary(char * fname, Binary ** bin)
 	bfd_info = bfd_get_arch_info(bfd_handle);
 	
 	/* grab the architecture string */
-	(*bin)->arch_str = (char *)malloc(strlen(bfd_info->printable_name) + 1);
+	(*bin)->arch_str = malloc(strlen(bfd_info->printable_name) + 1);
+	if(!((*bin)->arch_str) && (strlen(bfd_info->printable_name) + 1))
+	{
+		dtor_Binary(bin);
+		fprintf(stderr, "out of memory, malloc of (*bin)->arch_str failed\n");
+		return -1;
+	}
 	strcpy((*bin)->arch_str, bfd_info->printable_name);
 	
 	/* machine type */
@@ -79,7 +101,6 @@ int load_binary(char * fname, Binary ** bin)
 	}
 
 	load_symbols_bfd(bfd_handle, (*bin));
-	load_dynsym_bfd(bfd_handle, (*bin));
 
 	if(load_sections_bfd(bfd_handle, (*bin)) < 0)
 		return -1;
@@ -237,14 +258,152 @@ static bfd * open_bfd(char * filename)
 	return bfd_handle;
 }
 
-static void load_symbols_bfd(bfd * bfd_handle, Binary * bin)
+static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 {
+	int err = 0;
+	long n, nsyms, nsyms_dyn, i, j;
+        long nfuncsyms = 0L, nfuncsyms_dyn = 0L;
+	asymbol ** bfd_symtab = NULL;
+	asymbol ** bfd_dynsym = NULL;
 
-}
+	/* first we load up the static symbols */
+	n = bfd_get_symtab_upper_bound(bfd_handle);
+	if(n < 0)
+	{
+		fprintf(stderr, "failed to read symtab\n\tERROR MESSAGE: (%s)\n", bfd_errmsg(bfd_get_error()));
+		return -1;
+	}	
+	else if(n)
+	{
+		bfd_symtab = malloc(n);
+		if(!bfd_symtab && n)
+		{
+			fprintf(stderr, "out of memory, malloc of bfd_symtab failed\n");
+			return -1;
+		}
+		
+		nsyms = bfd_canonicalize_symtab(bfd_handle, bfd_symtab);
+		if(nsyms < 0)
+		{
+			fprintf(stderr, "failed to read symbol table\n\tERROR MESSAGE: (%s)\n", bfd_errmsg(bfd_get_error()));
+			free(bfd_symtab);
+			bfd_symtab = NULL;
+			err = 1;
+		}
+		/* on the first pass, we'll figure out how many function symbols we have */	
+		for(i = 0; i < nsyms; i++)
+		{
+			if(bfd_symtab[i]->flags & BSF_FUNCTION)
+			{
+				nfuncsyms++;		
+			}
+		}
+	}
 
-static void load_dynsym_bfd(bfd * bfd_handle, Binary * bin)
-{
+	/* then we load up the dynamic symbols */
+	n = bfd_get_dynamic_symtab_upper_bound(bfd_handle);
+	if(n < 0)
+	{
+		fprintf(stderr, "failed to read dynamic symtab\n\tERROR MESSAGE: (%s)\n", bfd_errmsg(bfd_get_error()));
+		return -1;
+	}	
+	else if(n)
+	{
+		bfd_dynsym = malloc(n);
+		if(!bfd_dynsym && n)
+		{
+			fprintf(stderr, "out of memory, malloc bfd_dynsym failed\n");
+			free(bfd_symtab);
+			return -1;
+		}
+		
+		nsyms_dyn = bfd_canonicalize_dynamic_symtab(bfd_handle, bfd_dynsym);
+		if(nsyms_dyn < 0)
+		{
+			fprintf(stderr, "failed to read symbol table\n\tERROR MESSAGE: (%s)\n", bfd_errmsg(bfd_get_error()));
+			free(bfd_dynsym);
+			bfd_dynsym = NULL;
+			err = 2;
+		}
+		/* on the first pass, we'll figure out how many function symbols we have */	
+		for(i = 0; i < nsyms_dyn; i++)
+		{
+			if(bfd_dynsym[i]->flags & BSF_FUNCTION)
+			{
+				nfuncsyms_dyn++;		
+			}
+		}
+	}
 
+	/* now we can allocate a Symbol pointer array and load the function symbols from both sections */
+	bin->symbols = calloc(sizeof(Symbol*) * (nfuncsyms + nfuncsyms_dyn), 1);
+	if(!(bin->symbols) && (sizeof(Symbol*) * (nfuncsyms + nfuncsyms_dyn)))
+	{
+		fprintf(stderr, "out of memory, malloc bin->symbols failed\n");
+		free(bfd_symtab);
+		free(bfd_dynsym);
+		return -1;
+	}
+	bin->num_symbols = (int)(nfuncsyms + nfuncsyms_dyn);
+	for(i = 0; i < bin->num_symbols; i++)
+	{
+		bin->symbols[i] = malloc(sizeof(Symbol));
+		if(!(bin->symbols[i]) && sizeof(Symbol))
+		{
+			fprintf(stderr, "out of memory, malloc bin->symbols[%ld] failed\n", i);
+			free(bfd_symtab);
+			free(bfd_dynsym);
+			free(bin->symbols);
+			bin->symbols = NULL;
+			return -1;
+		}
+		bin->symbols[i]->type = SYM_TYPE_FUNC;
+		if(i < nfuncsyms)
+		{	
+			bin->symbols[i]->name = malloc(strlen(bfd_symtab[i]->name) + 1);
+			if(!(bin->symbols[i]->name) && (strlen(bfd_symtab[i]->name) + 1))
+			{
+				fprintf(stderr, "out of memory, malloc of bin->symbols[%ld]->name failed\n", i);
+				free(bfd_symtab);
+				free(bfd_dynsym);
+				for(j = 0; j < i; j++)
+				{
+					free(bin->symbols[j]);
+					bin->symbols[j] = NULL;
+				}
+				free(bin->symbols);
+				bin->symbols = NULL;
+				return -1;
+			}
+			strcpy(bin->symbols[i]->name, bfd_symtab[i]->name);
+			bin->symbols[i]->addr = bfd_asymbol_value(bfd_symtab[i]);
+		}
+		else
+		{
+			bin->symbols[i]->name = malloc(strlen(bfd_dynsym[i-nfuncsyms]->name) + 1);
+			if(!(bin->symbols[i]->name) && (strlen(bfd_dynsym[i-nfuncsyms]->name) + 1))
+			{
+				fprintf(stderr, "out of memory, malloc of bin->symbols[%ld]->name failed\n", i);
+				free(bfd_symtab);
+				free(bfd_dynsym);
+				for(j = 0; j < i; j++)
+				{
+					free(bin->symbols[j]);
+					bin->symbols[j] = NULL;
+				}
+				free(bin->symbols);
+				bin->symbols = NULL;
+				return -1;
+			}
+			strcpy(bin->symbols[i]->name, bfd_dynsym[i-nfuncsyms]->name);
+			bin->symbols[i]->addr = bfd_asymbol_value(bfd_dynsym[i-nfuncsyms]);
+		}
+	}
+	
+	free(bfd_dynsym);
+	free(bfd_symtab);
+
+	return err;
 }
 
 static int load_sections_bfd(bfd * bfd_handle, Binary * bin)
