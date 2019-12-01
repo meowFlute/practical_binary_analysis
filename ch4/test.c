@@ -35,10 +35,12 @@ int main(int argc, char * argv[])
 		printf("type: %s, machine: %dbit %s, entry point: 0x%" PRIx64 "\n", bin->type_str, bin->bits, bin->arch_str, bin->entry);
 		/* symbols */
 		printf("Function Symbols:\n");
+		printf("\tTYPE \t%-40s \tADDRESS\n", "NAME");
+		printf("\t---- \t%-40s \t-------\n", "----");
 		for(i = 0; i < bin->num_symbols; i++)
 		{
 			if(bin->symbols[i]->type == SYM_TYPE_FUNC)
-				printf("\tFUNC \t%s \t0x%" PRIx64 "\n", bin->symbols[i]->name, bin->symbols[i]->addr); 
+				printf("\tFUNC \t%-40s \t0x%" PRIx64 "\n", bin->symbols[i]->name, bin->symbols[i]->addr); 
 		}
 
 		/* now we destroy everything */

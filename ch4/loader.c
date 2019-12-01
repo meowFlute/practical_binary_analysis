@@ -261,10 +261,11 @@ static bfd * open_bfd(char * filename)
 static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 {
 	int err = 0;
-	long n, nsyms, nsyms_dyn, i, j;
+	long n, nsyms, nsyms_dyn, i, j, arr_idx;
         long nfuncsyms = 0L, nfuncsyms_dyn = 0L;
 	asymbol ** bfd_symtab = NULL;
 	asymbol ** bfd_dynsym = NULL;
+	asymbol * bfd_sym = NULL;
 
 	/* first we load up the static symbols */
 	n = bfd_get_symtab_upper_bound(bfd_handle);
@@ -345,28 +346,35 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 		return -1;
 	}
 	bin->num_symbols = (int)(nfuncsyms + nfuncsyms_dyn);
-	for(i = 0; i < bin->num_symbols; i++)
+	/* iterate through all of both arrays */
+	arr_idx = 0; /* set index of bin->symbols[arr_idx] to zero */
+	for(i = 0; i < (nsyms + nsyms_dyn); i++)
 	{
-		bin->symbols[i] = malloc(sizeof(Symbol));
-		if(!(bin->symbols[i]) && sizeof(Symbol))
+		/* get an asymbol pointer to the current asymbol in question */
+		bfd_sym = i < nsyms ? bfd_symtab[i] : bfd_dynsym[i - nsyms];
+		/* check if we're looking at a function pointer or not */
+		if(bfd_sym->flags & BSF_FUNCTION)
 		{
-			fprintf(stderr, "out of memory, malloc bin->symbols[%ld] failed\n", i);
-			free(bfd_symtab);
-			free(bfd_dynsym);
-			free(bin->symbols);
-			bin->symbols = NULL;
-			return -1;
-		}
-		bin->symbols[i]->type = SYM_TYPE_FUNC;
-		if(i < nfuncsyms)
-		{	
-			bin->symbols[i]->name = malloc(strlen(bfd_symtab[i]->name) + 1);
-			if(!(bin->symbols[i]->name) && (strlen(bfd_symtab[i]->name) + 1))
+			/* allocate memory for the symbol struct */
+			bin->symbols[arr_idx] = malloc(sizeof(Symbol));
+			if(!(bin->symbols[arr_idx]) && sizeof(Symbol))
 			{
-				fprintf(stderr, "out of memory, malloc of bin->symbols[%ld]->name failed\n", i);
+				fprintf(stderr, "out of memory, malloc bin->symbols[%ld] failed\n", arr_idx);
 				free(bfd_symtab);
 				free(bfd_dynsym);
-				for(j = 0; j < i; j++)
+				free(bin->symbols);
+				bin->symbols = NULL;
+				return -1;
+			}
+			/* type will always be a SYM_TYPE_FUNC here because we checked for BSF_FUNCTION type in the asymbol pointer */
+			bin->symbols[arr_idx]->type = SYM_TYPE_FUNC;
+			bin->symbols[arr_idx]->name = malloc(strlen(bfd_sym->name) + 1);
+			if(!(bin->symbols[arr_idx]->name) && (strlen(bfd_sym->name) + 1))
+			{
+				fprintf(stderr, "out of memory, malloc of bin->symbols[%ld]->name failed\n", arr_idx);
+				free(bfd_symtab);
+				free(bfd_dynsym);
+				for(j = 0; j < arr_idx; j++)
 				{
 					free(bin->symbols[j]);
 					bin->symbols[j] = NULL;
@@ -375,30 +383,8 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 				bin->symbols = NULL;
 				return -1;
 			}
-			strcpy(bin->symbols[i]->name, bfd_symtab[i]->name);
-			bin->symbols[i]->addr = bfd_asymbol_value(bfd_symtab[i]);
-			bin->symbols[i]->type = SYM_TYPE_FUNC;
-		}
-		else
-		{
-			bin->symbols[i]->name = malloc(strlen(bfd_dynsym[i-nfuncsyms]->name) + 1);
-			if(!(bin->symbols[i]->name) && (strlen(bfd_dynsym[i-nfuncsyms]->name) + 1))
-			{
-				fprintf(stderr, "out of memory, malloc of bin->symbols[%ld]->name failed\n", i);
-				free(bfd_symtab);
-				free(bfd_dynsym);
-				for(j = 0; j < i; j++)
-				{
-					free(bin->symbols[j]);
-					bin->symbols[j] = NULL;
-				}
-				free(bin->symbols);
-				bin->symbols = NULL;
-				return -1;
-			}
-			strcpy(bin->symbols[i]->name, bfd_dynsym[i-nfuncsyms]->name);
-			bin->symbols[i]->addr = bfd_asymbol_value(bfd_dynsym[i-nfuncsyms]);
-			bin->symbols[i]->type = SYM_TYPE_FUNC;
+			strcpy(bin->symbols[arr_idx]->name, bfd_sym->name);
+			bin->symbols[arr_idx++]->addr = bfd_asymbol_value(bfd_sym);
 		}
 	}
 	
