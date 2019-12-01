@@ -377,6 +377,7 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 			}
 			strcpy(bin->symbols[i]->name, bfd_symtab[i]->name);
 			bin->symbols[i]->addr = bfd_asymbol_value(bfd_symtab[i]);
+			bin->symbols[i]->type = SYM_TYPE_FUNC;
 		}
 		else
 		{
@@ -397,6 +398,7 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 			}
 			strcpy(bin->symbols[i]->name, bfd_dynsym[i-nfuncsyms]->name);
 			bin->symbols[i]->addr = bfd_asymbol_value(bfd_dynsym[i-nfuncsyms]);
+			bin->symbols[i]->type = SYM_TYPE_FUNC;
 		}
 	}
 	

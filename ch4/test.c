@@ -7,38 +7,42 @@
 
 int main(int argc, char * argv[])
 {
+	unsigned int i;
 	Binary * bin = NULL;
 	char * filename = NULL;
 
 	if(argc == 2)
 	{
-		printf("file to open: %s\n", argv[1]);
-	
-		printf("filename pre allocation and copy %s\n", filename);
-
-		filename = (char *)malloc(strlen(argv[1]) + 1);
+		/* allocate a buffer for filename */
+		filename = malloc(strlen(argv[1]) + 1);
+		if(!(filename) && (strlen(argv[1]) + 1))
+		{
+			printf("malloc of filename failed in test.c\n");
+			return 1;
+		}
 		strcpy(filename, argv[1]);
 	
-		printf("filename after allocation and copy %s\n", filename);
-	
-		printf("\nBinary pointer prior to load_binary(): %p\n", bin);
-		printf("return from loading: %d\n", load_binary(filename, &bin));
+		/* pass that to the binary loader */
+		load_binary(filename, &bin);
 
+		/* don't need filename anymore, free it */
 		free(filename);
 		filename = NULL;
 
-       		printf("Binary pointer after load_binary(): %p\n", bin);
-
 		/* what does our bin contain? */
-		printf("bin->filename: %s\n", bin->filename);
-		printf("bin->type: %d (%s)\n", bin->type, bin->type_str);
-		printf("bin->arch: %d (%s)\n", bin->arch, bin->arch_str);
-		printf("bin->bits: %d\n", bin->bits);
-		printf("bin->entry: 0x%" PRIx64 "\n", bin->entry);
+		/* general */
+		printf("file: %s\n", bin->filename);
+		printf("type: %s, machine: %dbit %s, entry point: 0x%" PRIx64 "\n", bin->type_str, bin->bits, bin->arch_str, bin->entry);
+		/* symbols */
+		printf("Function Symbols:\n");
+		for(i = 0; i < bin->num_symbols; i++)
+		{
+			if(bin->symbols[i]->type == SYM_TYPE_FUNC)
+				printf("\tFUNC \t%s \t0x%" PRIx64 "\n", bin->symbols[i]->name, bin->symbols[i]->addr); 
+		}
 
 		/* now we destroy everything */
 		unload_binary(&bin);
-		printf("\nBinary pointer after unload_binary(): %p\n", bin);
 	}
 	else
 	{
