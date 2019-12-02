@@ -337,8 +337,8 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 	}
 
 	/* now we can allocate a Symbol pointer array and load the function symbols from both sections */
-	bin->symbols = calloc(sizeof(Symbol*) * (nfuncsyms + nfuncsyms_dyn), 1);
-	if(!(bin->symbols) && (sizeof(Symbol*) * (nfuncsyms + nfuncsyms_dyn)))
+	bin->symbols = calloc(sizeof(Symbol *) * (nfuncsyms + nfuncsyms_dyn), 1);
+	if(!(bin->symbols) && (sizeof(Symbol *)) && (nfuncsyms + nfuncsyms_dyn))
 	{
 		fprintf(stderr, "out of memory, malloc bin->symbols failed\n");
 		free(bfd_symtab);
@@ -396,5 +396,166 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 
 static int load_sections_bfd(bfd * bfd_handle, Binary * bin)
 {
+	int bfd_flags;
+	unsigned int num_sections = 0U, cur_section = 0U, i;
+	asection * bfd_sec;
+	SectionType sectype;
+	const char * secname;
+
+	/* this is a great way to iterate through a linked list without knowing its length explicitly */
+	/* start at the first pointer; as long as it isn't a null pointer; go to the next pointer */
+	/* we're going to go through and count all of them on this pass */
+	for(bfd_sec = bfd_handle->sections; bfd_sec; bfd_sec = bfd_sec->next)
+	{
+		/* get section flags using libbfd */
+		bfd_flags = bfd_get_section_flags(bfd_handle, bfd_sec);
+
+		/* we only care about CODE and DATA sections, so we look at the libbfd flags */
+		if((bfd_flags & SEC_CODE) || (bfd_flags & SEC_DATA))
+			num_sections++;
+	}
+	
+	/* Now that we know how much memory we want to allocate for our array, we allocate it */
+	bin->sections = malloc(sizeof(Section *) * num_sections);
+	if(!(bin->sections) && (sizeof(Section *) && num_sections))
+	{
+		fprintf(stderr, "out of memory, cannot allocate bin->sections pointer array\n");
+		return -1;
+	}
+	/* store off how much space we allocated */
+	bin->num_sections = num_sections;
+
+	/* with that array, we now iterate through all the sections again and store our info */
+	for(bfd_sec = bfd_handle->sections; bfd_sec; bfd_sec = bfd_sec->next)
+	{
+		/* get section flags using libbfd */
+		bfd_flags = bfd_get_section_flags(bfd_handle, bfd_sec);
+
+		/* we only care about CODE and DATA sections, so we look at the libbfd flags */
+		if(bfd_flags & SEC_CODE)
+		{
+			sectype = SEC_TYPE_CODE;	
+		}	
+		else if (bfd_flags & SEC_DATA)
+		{
+			sectype = SEC_TYPE_DATA;
+		}
+		else
+		{
+			continue;
+		}
+
+		/* if we made it this far, we know we want to allocate space for a Section struct at the current Section pointer */
+		bin->sections[cur_section] = malloc(sizeof(Section));
+		if(!(bin->sections[cur_section]) && (sizeof(Section)))
+		{
+			printf("out of memory, cannot allocate bin->sections[%d]", cur_section);
+			for(i = 0; i < cur_section; i++)
+			{
+				free(bin->sections[i]->name);
+				bin->sections[i]->name = NULL;
+				free(bin->sections[i]->bytes);
+				bin->sections[i]->bytes = NULL;
+				free(bin->sections[i]);
+				bin->sections[i] = NULL;
+			}
+			free(bin->sections);
+			bin->sections = NULL;
+			return -1;
+		}
+		
+		/* fill out the fields in order, allocating space for name and bytes */
+		
+		/* binary the section is in */
+		bin->sections[cur_section]->binary = bin;
+		
+		/* string for the name, "<unnamed>" means it doesn't have one */
+		secname = bfd_section_name(bfd_handle, bfd_sec);
+		if(!secname)
+			secname = "<unnamed>";
+		/* allocate space with error checking */
+		bin->sections[cur_section]->name = malloc(strlen(secname) + 1);
+		if(!(bin->sections[cur_section]->name) && (strlen(secname) + 1))
+		{
+			printf("out of memory, cannot allocate bin->sections[%d]->name", cur_section);
+			free(bin->sections[cur_section]);
+			bin->sections[cur_section] = NULL;
+			for(i = 0; i < cur_section; i++)
+			{
+				free(bin->sections[i]->name);
+				bin->sections[i]->name = NULL;
+				free(bin->sections[i]->bytes);
+				bin->sections[i]->bytes = NULL;
+				free(bin->sections[i]);
+				bin->sections[i] = NULL;
+			}
+			free(bin->sections);
+			bin->sections = NULL;
+			return -1;
+		}
+		/* copy it in permanently */
+		strcpy(bin->sections[cur_section]->name, secname);
+		
+		/* type */
+		bin->sections[cur_section]->type = sectype;
+
+		/* virtual memory address */
+		bin->sections[cur_section]->vma = bfd_section_vma(bfd_handle, bfd_sec);
+
+		/* size of section */
+		bin->sections[cur_section]->size = bfd_section_size(bfd_handle, bfd_sec);
+
+		/* last but not least, a bytes dump of the section */
+		/* allocate the right number of bytes first */
+		bin->sections[cur_section]->bytes = malloc(bin->sections[cur_section]->size);
+		if(!(bin->sections[cur_section]->bytes) && (bin->sections[cur_section]->size))
+		{
+			printf("out of memory, cannot allocate bin->sections[%d]->name", cur_section);
+			free(bin->sections[cur_section]->name);
+			bin->sections[cur_section]->name = NULL;
+			free(bin->sections[cur_section]);
+			bin->sections[cur_section] = NULL;
+			for(i = 0; i < cur_section; i++)
+			{
+				free(bin->sections[i]->name);
+				bin->sections[i]->name = NULL;
+				free(bin->sections[i]->bytes);
+				bin->sections[i]->bytes = NULL;
+				free(bin->sections[i]);
+				bin->sections[i] = NULL;
+			}
+			free(bin->sections);
+			bin->sections = NULL;
+			return -1;
+		}
+
+		/* dump the section contents using libbfd's function */
+		if(!bfd_get_section_contents(
+					bfd_handle, 				/* pointer to the abfd */
+					bfd_sec, 				/* pointer to the asection */
+					bin->sections[cur_section]->bytes,	/* pointer to the byte buffer */
+					0,					/* starting index */ 
+					bin->sections[cur_section]->size))	/* size of buffer in bytes */
+		{
+			fprintf(stderr, "failed to read section '%s'\n\tERROR MESSAGE: %s\n", bin->sections[cur_section]->name, bfd_errmsg(bfd_get_error()));
+			for(i = 0; i < (cur_section + 1); i++)
+			{
+				free(bin->sections[i]->name);
+				bin->sections[i]->name = NULL;
+				free(bin->sections[i]->bytes);
+				bin->sections[i]->bytes = NULL;
+				free(bin->sections[i]);
+				bin->sections[i] = NULL;
+			}
+			free(bin->sections);
+			bin->sections = NULL;
+
+			return -2;
+		}
+		
+		/* increment pointer index in pointer array */
+		cur_section++;
+	}
+
 	return 0;
 }

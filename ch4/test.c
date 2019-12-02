@@ -33,6 +33,18 @@ int main(int argc, char * argv[])
 		/* general */
 		printf("file: %s\n", bin->filename);
 		printf("type: %s, machine: %dbit %s, entry point: 0x%" PRIx64 "\n", bin->type_str, bin->bits, bin->arch_str, bin->entry);
+		/* sections */
+		printf("Sections:\n");
+		printf("\t%-16s   %-8s %-30s %s\n", "ADDRESS", "SIZE", "NAME", "TYPE");
+		printf("\t%-16s   %-8s %-30s %s\n", "-------", "----", "----", "----");
+		for(i = 0; i < bin->num_sections; i++)
+		{
+			printf("\t0x%-16lx %-8lu %-30s %s\n", 
+					bin->sections[i]->vma, 
+					bin->sections[i]->size, 
+					bin->sections[i]->name, 
+					bin->sections[i]->type == SEC_TYPE_CODE ? "CODE" : "DATA");
+		}
 		/* symbols */
 		printf("Function Symbols:\n");
 		printf("\tTYPE \t%-40s \tADDRESS\n", "NAME");
