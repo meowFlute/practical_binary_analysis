@@ -294,7 +294,7 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 		/* on the first pass, we'll figure out how many function symbols we have */	
 		for(i = 0; i < nsyms; i++)
 		{
-			if(bfd_symtab[i]->flags & BSF_FUNCTION)
+			if(bfd_symtab[i]->flags & (BSF_FUNCTION|BSF_OBJECT))
 			{
 				nfuncsyms++;		
 			}
@@ -329,7 +329,7 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 		/* on the first pass, we'll figure out how many function symbols we have */	
 		for(i = 0; i < nsyms_dyn; i++)
 		{
-			if(bfd_dynsym[i]->flags & BSF_FUNCTION)
+			if(bfd_dynsym[i]->flags & (BSF_FUNCTION|BSF_OBJECT))
 			{
 				nfuncsyms_dyn++;		
 			}
@@ -353,7 +353,7 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 		/* get an asymbol pointer to the current asymbol in question */
 		bfd_sym = i < nsyms ? bfd_symtab[i] : bfd_dynsym[i - nsyms];
 		/* check if we're looking at a function pointer or not */
-		if(bfd_sym->flags & BSF_FUNCTION)
+		if(bfd_sym->flags & (BSF_FUNCTION|BSF_OBJECT))
 		{
 			/* allocate memory for the symbol struct */
 			bin->symbols[arr_idx] = malloc(sizeof(Symbol));
@@ -366,8 +366,19 @@ static int load_symbols_bfd(bfd * bfd_handle, Binary * bin)
 				bin->symbols = NULL;
 				return -1;
 			}
-			/* type will always be a SYM_TYPE_FUNC here because we checked for BSF_FUNCTION type in the asymbol pointer */
-			bin->symbols[arr_idx]->type = SYM_TYPE_FUNC;
+			bin->symbols[arr_idx]->type = SYM_TYPE_UKN; /* initialize as zero'd out (no flags set) */
+			/* for each BSF_FLAG set one of our SymbolType flags */
+			if(bfd_sym->flags & BSF_FUNCTION)
+				bin->symbols[arr_idx]->type += SYM_TYPE_FUNC;
+			if(bfd_sym->flags & BSF_GLOBAL)
+				bin->symbols[arr_idx]->type += SYM_TYPE_GLOBAL;
+			if(bfd_sym->flags & BSF_LOCAL)
+				bin->symbols[arr_idx]->type += SYM_TYPE_LOCAL;
+			if(bfd_sym->flags & BSF_WEAK)
+				bin->symbols[arr_idx]->type += SYM_TYPE_WEAK;
+			if(bfd_sym->flags & BSF_OBJECT)
+				bin->symbols[arr_idx]->type += SYM_TYPE_OBJECT;
+	
 			bin->symbols[arr_idx]->name = malloc(strlen(bfd_sym->name) + 1);
 			if(!(bin->symbols[arr_idx]->name) && (strlen(bfd_sym->name) + 1))
 			{

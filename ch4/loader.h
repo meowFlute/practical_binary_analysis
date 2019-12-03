@@ -19,8 +19,12 @@
  * 	in the symbol table during static analysis of a binary */
 typedef enum 
 {
-	SYM_TYPE_UKN = 0,	/* unknown symbol type */
-	SYM_TYPE_FUNC = 1	/* function symbol type */
+	SYM_TYPE_UKN 	= 0,		/* unknown symbol type (no flags set) */
+	SYM_TYPE_FUNC 	= (1<<0),	/* function symbol type */
+	SYM_TYPE_GLOBAL = (1<<1), 	/* global data symbol */
+	SYM_TYPE_LOCAL 	= (1<<2), 	/* local data symbol */
+	SYM_TYPE_WEAK 	= (1<<3), 	/* weak symbol */
+	SYM_TYPE_OBJECT = (1<<4)	/* Objext type */
 } SymbolType;
 /* types: enums: SectionType 
  * 	This enumeration is for describing the types of sections we encounter

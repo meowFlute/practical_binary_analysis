@@ -15,7 +15,7 @@ int main(int argc, char * argv[])
 	unsigned char s_flag = 0U, d_flag = 0U, f_flag = 0U, x_flag = 0U, x_read_flag = 0U;
 	char* x_secname = NULL;
 	unsigned int i, j;
-	uint64_t x_addr, x_addr_start, x_idx, x_idx_start;
+	uint64_t x_addr, x_addr_start, x_idx, x_idx_start = 0U;
 	int c, index, x_buf_idx;
 	Binary * bin = NULL;
 	char * filename = NULL;	
@@ -94,19 +94,31 @@ int main(int argc, char * argv[])
 		if(f_flag)
 		{
 			printf("Function Symbols:\n");
-			printf("\tTYPE \t%-40s \tADDRESS\n", "NAME");
-			printf("\t---- \t%-40s \t-------\n", "----");
+			printf("\tTYPE   \t%-40s \tADDRESS\n", "NAME");
+			printf("\t----   \t%-40s \t-------\n", "----");
 			for(i = 0; i < bin->num_symbols; i++)
 			{
-				if(bin->symbols[i]->type == SYM_TYPE_FUNC)
-					printf("\tFUNC \t%-40s \t0x%" PRIx64 "\n", bin->symbols[i]->name, bin->symbols[i]->addr); 
+				if(bin->symbols[i]->type & SYM_TYPE_FUNC) 
+					printf("\tFUNC \t%-40s \t0x%" PRIx64 "\n", 
+							bin->symbols[i]->name, 
+							bin->symbols[i]->addr); 
 			}
 		}
 		
 		/* data symbols */
 		if(d_flag)
 		{
-			fprintf(stderr, "%s: data symbol reading not implemented yet!\n", argv[0]);
+			printf("Data Symbols:\n");
+			printf("\tTYPE        \t%-40s \tADDRESS\n", "NAME");
+			printf("\t----        \t%-40s \t-------\n", "----");
+			for(i = 0; i < bin->num_symbols; i++)
+			{
+				if(bin->symbols[i]->type & SYM_TYPE_OBJECT)
+					printf("\t%-11s \t%-40s \t0x%" PRIx64 "\n", 
+							(bin->symbols[i]->type & SYM_TYPE_GLOBAL) ? "GLOBAL DATA" : "LOCAL DATA",
+							bin->symbols[i]->name, 
+							bin->symbols[i]->addr); 
+			}
 		}
 		
 		/* hex dumps of sections */
