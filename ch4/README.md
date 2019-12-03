@@ -1,6 +1,4 @@
-#Chapter 4  
-
-A Simple Binary Loader
+# Chapter 4 - A Simple Binary Loader
 For this project I decided to experiment with getopt_long and some other things to make it useful. 
 As a result, the following is what you get when you use the program
 ```console
