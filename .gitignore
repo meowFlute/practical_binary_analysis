@@ -9,6 +9,10 @@
 
 ### Above combination is for executables without extension ###
 
+### Ignore subfolders that are just for me
+example/
+example/*
+
 # Prerequisites
 *.d
 
