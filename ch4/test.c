@@ -3,6 +3,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <ctype.h>
+#include <unistd.h>
 #include <getopt.h>
 
 #include "loader.h"
@@ -11,9 +12,10 @@ static void print_help(void);
 
 int main(int argc, char * argv[])
 {
-	unsigned char s_flag = 0U, d_flag = 0U, f_flag = 0U, x_flag = 0U;
+	unsigned char s_flag = 0U, d_flag = 0U, f_flag = 0U, x_flag = 0U, x_read_flag = 0U;
 	char* x_secname = NULL;
 	unsigned int i;
+	uint64_t x_addr, x_idx;
 	int c, index;
 	Binary * bin = NULL;
 	char * filename = NULL;	
@@ -57,56 +59,97 @@ int main(int argc, char * argv[])
 		}
 	}
 
-	printf ("s_flag = %d, d_flag = %d, f_flag = %d, x_flag = %d, x_secname = %s\n", s_flag, d_flag, f_flag, x_flag, x_secname);
-
-  	for (index = optind; index < argc; index++)
-		printf ("Non-option argument %s\n", argv[index]);
-
-	printf("optind = %d, argc = %d\n", optind, argc);
-
-  	return 0;
-	if(argc == 2)
+	/* check for only one additional argument and see if it is a readable file you can access */
+	if(((argc - optind) == 1) && (access(argv[optind], R_OK) != -1) && (s_flag || d_flag || f_flag || (x_flag && x_secname)))
 	{
-		/* allocate a buffer for filename */
-		filename = malloc(strlen(argv[1]) + 1);
-		if(!(filename) && (strlen(argv[1]) + 1))
-		{
-			printf("malloc of filename failed in test.c\n");
-			return 1;
-		}
-		strcpy(filename, argv[1]);
-	
+		/* rename it for clarity */
+		filename = argv[optind];
+		
 		/* pass that to the binary loader */
 		load_binary(filename, &bin);
-
-		/* don't need filename anymore, free it */
-		free(filename);
-		filename = NULL;
 
 		/* what does our bin contain? */
 		/* general */
 		printf("file: %s\n", bin->filename);
 		printf("type: %s, machine: %dbit %s, entry point: 0x%" PRIx64 "\n", bin->type_str, bin->bits, bin->arch_str, bin->entry);
-		/* sections */
-		printf("Sections:\n");
-		printf("\t%-16s   %-8s %-30s %s\n", "ADDRESS", "SIZE", "NAME", "TYPE");
-		printf("\t%-16s   %-8s %-30s %s\n", "-------", "----", "----", "----");
-		for(i = 0; i < bin->num_sections; i++)
+		
+		/* displaying sections */
+	        if(s_flag)
 		{
-			printf("\t0x%-16lx %-8lu %-30s %s\n", 
-					bin->sections[i]->vma, 
-					bin->sections[i]->size, 
-					bin->sections[i]->name, 
-					bin->sections[i]->type == SEC_TYPE_CODE ? "CODE" : "DATA");
+			printf("Sections:\n");
+			printf("\t%-16s   %-8s %-30s %s\n", "ADDRESS", "SIZE", "NAME", "TYPE");
+			printf("\t%-16s   %-8s %-30s %s\n", "-------", "----", "----", "----");
+			for(i = 0; i < bin->num_sections; i++)
+			{
+				printf("\t0x%-16lx %-8lu %-30s %s\n", 
+						bin->sections[i]->vma, 
+						bin->sections[i]->size, 
+						bin->sections[i]->name, 
+						bin->sections[i]->type == SEC_TYPE_CODE ? "CODE" : "DATA");
+			}
 		}
-		/* symbols */
-		printf("Function Symbols:\n");
-		printf("\tTYPE \t%-40s \tADDRESS\n", "NAME");
-		printf("\t---- \t%-40s \t-------\n", "----");
-		for(i = 0; i < bin->num_symbols; i++)
+
+		/* function symbols */
+		if(f_flag)
 		{
-			if(bin->symbols[i]->type == SYM_TYPE_FUNC)
-				printf("\tFUNC \t%-40s \t0x%" PRIx64 "\n", bin->symbols[i]->name, bin->symbols[i]->addr); 
+			printf("Function Symbols:\n");
+			printf("\tTYPE \t%-40s \tADDRESS\n", "NAME");
+			printf("\t---- \t%-40s \t-------\n", "----");
+			for(i = 0; i < bin->num_symbols; i++)
+			{
+				if(bin->symbols[i]->type == SYM_TYPE_FUNC)
+					printf("\tFUNC \t%-40s \t0x%" PRIx64 "\n", bin->symbols[i]->name, bin->symbols[i]->addr); 
+			}
+		}
+		
+		/* data symbols */
+		if(d_flag)
+		{
+			fprintf(stderr, "%s: data symbol reading not implemented yet!\n", argv[0]);
+		}
+		
+		/* hex dumps of sections */
+		if(x_flag)
+		{
+			/* find the section and dump its contents in some readable way */
+			for(i = 0; i < bin->num_sections; i++)
+			{
+				if(strcmp(x_secname, bin->sections[i]->name) == 0)
+				{
+					x_read_flag = 1;
+					printf("Hex Dump of %s (section type: %s, bytes dumped: %ld):\n", 
+							bin->sections[i]->name, 
+							bin->sections[i]->type == SEC_TYPE_CODE ? "CODE" : "DATA",
+							bin->sections[i]->size);
+
+					x_addr = bin->sections[i]->vma;
+					for(x_idx = 0; x_idx < bin->sections[i]->size; x_idx++)
+					{
+						/* print in logical blocks with the virtual memory address annotated */
+						if((x_idx == 0) || ((x_addr % 32) == 0))
+						{
+							/* reprint as chars on the right like other hex dumps I've seen */
+							printf("\n0x%016lx: ", x_addr);
+						}
+						
+						/* print bytes in blocks of twos */
+						if((x_addr % 2) == 0)
+							printf(" ");
+
+						/* always print a block */
+						printf("%02x", bin->sections[i]->bytes[x_idx]);
+
+						/* for every byte printed, increment the address by one */
+						x_addr++;
+					}
+					printf("\n");
+				}
+			}
+
+			if(!x_read_flag)
+			{
+				fprintf(stderr, "%s: section %s not found for hex dump\n", argv[0], x_secname);
+			}
 		}
 
 		/* now we destroy everything */
@@ -114,11 +157,11 @@ int main(int argc, char * argv[])
 	}
 	else
 	{
-		printf("give me a filename of a binary\n");
+		print_help();
 		return 1;
 	}
 
-	return 0;
+  	return 0;
 }
 
 static void print_help(void)
