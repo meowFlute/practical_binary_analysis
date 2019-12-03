@@ -14,11 +14,12 @@ int main(int argc, char * argv[])
 {
 	unsigned char s_flag = 0U, d_flag = 0U, f_flag = 0U, x_flag = 0U, x_read_flag = 0U;
 	char* x_secname = NULL;
-	unsigned int i;
-	uint64_t x_addr, x_idx;
-	int c, index;
+	unsigned int i, j;
+	uint64_t x_addr, x_addr_start, x_idx, x_idx_start;
+	int c, index, x_buf_idx;
 	Binary * bin = NULL;
 	char * filename = NULL;	
+	char x_buffer[81];
 
 	struct option long_options[] = 
 	{
@@ -117,30 +118,64 @@ int main(int argc, char * argv[])
 				if(strcmp(x_secname, bin->sections[i]->name) == 0)
 				{
 					x_read_flag = 1;
-					printf("Hex Dump of %s (section type: %s, bytes dumped: %ld):\n", 
+
+					printf("Hex Dump of %s (section type: %s, bytes dumped: %ld):\n\n", 
 							bin->sections[i]->name, 
 							bin->sections[i]->type == SEC_TYPE_CODE ? "CODE" : "DATA",
 							bin->sections[i]->size);
-
+					printf("%-20s%-82s%s\n", "VMA", "Hex Data", "Equivalent Chars");						
+					printf("%-20s%-82s%s\n", "---", "--------", "----------------");
+					
 					x_addr = bin->sections[i]->vma;
+					x_addr_start = x_addr;
+					x_buf_idx = 0;
 					for(x_idx = 0; x_idx < bin->sections[i]->size; x_idx++)
 					{
 						/* print in logical blocks with the virtual memory address annotated */
-						if((x_idx == 0) || ((x_addr % 32) == 0))
+						if((x_idx != 0) && ((x_addr % 32) == 0))
 						{
+							x_buffer[++x_buf_idx] = '\0'; /* null terminate end of string */
 							/* reprint as chars on the right like other hex dumps I've seen */
-							printf("\n0x%016lx: ", x_addr);
+							printf("0x%016lx:", x_addr_start); 	/* 20 character virtual address */
+							printf("%80s   ", x_buffer);
+							memcpy(x_buffer, (bin->sections[i]->bytes + x_idx_start), x_idx - x_idx_start);
+							for(j = 0; j < (x_idx - x_idx_start); j++)
+							{
+								if(isprint(x_buffer[j]))
+									printf("%c", x_buffer[j]);
+								else
+									printf(".");
+							}
+							printf("\n");
+							x_idx_start = x_idx;
+							x_addr_start = x_addr;
+							x_buf_idx = 0;
 						}
 						
-						/* print bytes in blocks of twos */
+						/* build up byte buffer in blocks of twos */
 						if((x_addr % 2) == 0)
-							printf(" ");
+						{
+							x_buffer[x_buf_idx++] = ' ';
+						}
 
 						/* always print a block */
-						printf("%02x", bin->sections[i]->bytes[x_idx]);
+						sprintf((x_buffer + x_buf_idx), "%02x", bin->sections[i]->bytes[x_idx]);
+						x_buf_idx += 2;
 
 						/* for every byte printed, increment the address by one */
 						x_addr++;
+					}
+					x_buffer[++x_buf_idx] = '\0'; /* null terminate end of string */
+					/* reprint as chars on the right like other hex dumps I've seen */
+					printf("0x%016lx:", x_addr_start); 	/* 20 character virtual address */
+					printf("%-80s   ", x_buffer);
+					memcpy(x_buffer, (bin->sections[i]->bytes + x_idx_start), x_idx - x_idx_start);
+					for(j = 0; j < (x_idx - x_idx_start); j++)
+					{
+						if(isprint(x_buffer[j]))
+							printf("%c", x_buffer[j]);
+						else
+							printf(".");
 					}
 					printf("\n");
 				}
@@ -148,7 +183,7 @@ int main(int argc, char * argv[])
 
 			if(!x_read_flag)
 			{
-				fprintf(stderr, "%s: section %s not found for hex dump\n", argv[0], x_secname);
+				fprintf(stderr, "%s: section %s not found in %s for hex dump\n", argv[0], x_secname, filename);
 			}
 		}
 
